@@ -18,7 +18,7 @@ void UKF::Init() {
 * Programming assignment functions:
 *******************************************************************************/
 
-void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out) {
+void UKF::PredictRadarMeasurement(VectorXd *z_out, MatrixXd *S_out) {
 
     //set state dimension
     int n_x = 5;
@@ -33,11 +33,11 @@ void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out) {
     double lambda = 3 - n_aug;
 
     //set vector for weights
-    VectorXd weights = VectorXd(2*n_aug+1);
-    double weight_0 = lambda/(lambda+n_aug);
+    VectorXd weights = VectorXd(2 * n_aug + 1);
+    double weight_0 = lambda / (lambda + n_aug);
     weights(0) = weight_0;
-    for (int i=1; i<2*n_aug+1; i++) {
-        double weight = 0.5/(n_aug+lambda);
+    for (int i = 1; i < 2 * n_aug + 1; i++) {
+        double weight = 0.5 / (n_aug + lambda);
         weights(i) = weight;
     }
 
@@ -53,11 +53,11 @@ void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out) {
     //create example matrix with predicted sigma points
     MatrixXd Xsig_pred = MatrixXd(n_x, 2 * n_aug + 1);
     Xsig_pred <<
-              5.9374,  6.0640,   5.925,  5.9436,  5.9266,  5.9374,  5.9389,  5.9374,  5.8106,  5.9457,  5.9310,  5.9465,  5.9374,  5.9359,  5.93744,
-            1.48,  1.4436,   1.660,  1.4934,  1.5036,    1.48,  1.4868,    1.48,  1.5271,  1.3104,  1.4787,  1.4674,    1.48,  1.4851,    1.486,
-            2.204,  2.2841,  2.2455,  2.2958,   2.204,   2.204,  2.2395,   2.204,  2.1256,  2.1642,  2.1139,   2.204,   2.204,  2.1702,   2.2049,
-            0.5367, 0.47338, 0.67809, 0.55455, 0.64364, 0.54337,  0.5367, 0.53851, 0.60017, 0.39546, 0.51900, 0.42991, 0.530188,  0.5367, 0.535048,
-            0.352, 0.29997, 0.46212, 0.37633,  0.4841, 0.41872,   0.352, 0.38744, 0.40562, 0.24347, 0.32926,  0.2214, 0.28687,   0.352, 0.318159;
+              5.9374, 6.0640, 5.925, 5.9436, 5.9266, 5.9374, 5.9389, 5.9374, 5.8106, 5.9457, 5.9310, 5.9465, 5.9374, 5.9359, 5.93744,
+            1.48, 1.4436, 1.660, 1.4934, 1.5036, 1.48, 1.4868, 1.48, 1.5271, 1.3104, 1.4787, 1.4674, 1.48, 1.4851, 1.486,
+            2.204, 2.2841, 2.2455, 2.2958, 2.204, 2.204, 2.2395, 2.204, 2.1256, 2.1642, 2.1139, 2.204, 2.204, 2.1702, 2.2049,
+            0.5367, 0.47338, 0.67809, 0.55455, 0.64364, 0.54337, 0.5367, 0.53851, 0.60017, 0.39546, 0.51900, 0.42991, 0.530188, 0.5367, 0.535048,
+            0.352, 0.29997, 0.46212, 0.37633, 0.4841, 0.41872, 0.352, 0.38744, 0.40562, 0.24347, 0.32926, 0.2214, 0.28687, 0.352, 0.318159;
 
     //create matrix for sigma points in measurement space
     MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug + 1);
@@ -66,15 +66,53 @@ void UKF::PredictRadarMeasurement(VectorXd* z_out, MatrixXd* S_out) {
     VectorXd z_pred = VectorXd(n_z);
 
     //measurement covariance matrix S
-    MatrixXd S = MatrixXd(n_z,n_z);
+    MatrixXd S = MatrixXd(n_z, n_z);
 
 /*******************************************************************************
  * Student part begin
  ******************************************************************************/
+    int n_sigma_points = Xsig_pred.cols();
 
     //transform sigma points into measurement space
+    for (int i = 0; i < n_sigma_points; i++) {
+        VectorXd sig = Xsig_pred.col(i);
+        double px = sig(0);
+        double py = sig(1);
+        double v = sig(2);
+        double yaw = sig(3);
+        double yawd = sig(3);
+
+        Zsig(0, i) = sqrt(px * px + py * py);
+        Zsig(1, i) = atan(py / px);
+        Zsig(2, i) = (px * cos(yaw) * v + py * sin(yaw) * v) / sqrt(px * px + py * py);
+    }
+
     //calculate mean predicted measurement
+    for (int i = 0; i < n_sigma_points; i++) {
+        z_pred += weights(i) * Zsig.col(i);
+    }
+
     //calculate innovation covariance matrix S
+    for (int i = 0; i < n_sigma_points; i++) {
+        VectorXd diff = Zsig.col(i) - z_pred;
+
+        // normalise angles
+        while (diff(1) > M_PI) {
+            diff(1) -= 2. * M_PI;
+        }
+        while (diff(1) < -M_PI) {
+            diff(1) += 2. * M_PI;
+        }
+
+        S += weights(i) * diff * diff.transpose();
+    }
+
+    MatrixXd R(3, 3);
+    R.row(0) << std_radr * std_radr, 0, 0;
+    R.row(1) << 0, std_radphi * std_radphi, 0;
+    R.row(2) << 0, 0, std_radrd * std_radrd;
+
+    S += R;
 
 
 /*******************************************************************************
